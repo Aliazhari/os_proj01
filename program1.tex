@@ -1,0 +1,259 @@
+\documentclass [12pt, letterpaper] {article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{fancyvrb}
+\usepackage{../../cs3320}
+\usepackage{hyperref}
+
+\begin{document}
+\project{1}{Tuesday, Sept. 28, 2021}
+\progdirections
+In this project you will gain experience with Linux system calls by
+constructing a new Linux shell. Your shell will be called msh (Merrimack
+Shell). Recall that a shell is a command line interface (CLI) that allows
+you to interact with the operating system.
+The assignment will be broken down into phases to help you
+organize your thoughts. To help you get started I have uploaded starter
+code to classroom.
+
+Notice you have been given \textbf{two(2) weeks} to complete this
+project. This project can \textbf{not} be completed in one night.
+You should complete the phases below in order. Each phase will consists
+of a few days work (see recommend completion date).
+
+\section*{Phase I -- Basic Shell (\emph{35 points})}
+\noindent\textbf{Recommended Completion Date}: Friday, Sept. 21\\
+\\
+In the first phase of this project you will implement the majority of the
+shell. You must construct the basic command line interpreter (it's the classic REPL algorithm
+we discussed in class). Your shell
+(i.e., the main process) should enter a tight loop that prompts the user
+for a command and then executes that command by {\tt fork(2)}-ing the main
+process and having the child {\tt exec(3)} the command. The parent should
+use {\tt wait(2)} to wait for the completion of the child process before
+continuing.
+
+There is one exception to the program flow above. If the user enters the
+command {\tt quit} or {\tt exit}, the main process should not call {\tt fork(2)} and
+instead just exit the program successfully.
+
+An example interaction with my solution to Phase I is below. Please make
+your output look \emph{exactly} like mine. In other words, please make
+your prompt be {\tt msh>}. You can just call \statement|get_command| in
+\texttt{shell.c} to achieve this task.
+
+\begin{Verbatim}[frame=single]
+ msh> make clobber
+ rm -f shell.o history.o
+ rm -f shell
+ msh> ls
+ head  history.cpp  Makefile  shell.cpp
+ msh>
+ msh>
+ msh> quit
+\end{Verbatim}
+Notice that I may hit enter as many times as I want with out causing the
+shell to do any work.
+
+As mentioned previously, you will need the {\tt fork(2)} and {\tt exec(3)}
+system calls. Recall that {\tt exec(3)} is a family of system of calls. I
+would recommend you use the {\tt execvp(3)} system call. To do use this you
+will need to construct an array of C strings (character arrays terminated
+with a \statement|NULL| character). This special array you construct is sometimes
+referred to as the {\tt argv} array. The first element in the array
+is the name of the command and the subsequent elements are are the options
+to the command. To help you with converting a C string to
+this \statement|argv| array, I have provided you with the the function
+\statement|build_argument_array| in {\tt shell.c}.
+
+The manual pages (man pages) will provide some assistance with {\tt fork(2)}
+and {\tt execvp(3)}.
+
+\section*{Phase II -- Backgrounding Processes (\emph{30 points})}
+\noindent\textbf{Recommended Completion Date}: Thursday, Sept. 23\\
+\\
+In this phase your are going to extend your shell with the ability to
+launch what is called a background process. To launch a background process
+the user appends and ampersand(\&) to the end of the command
+
+A background process is run in a child process just like in Phase I,
+except with a background process the shell won't wait for the process.
+Won't this make zombies you ask? Why yes it will if you don't keep track
+of the outstanding process and make sure they are all finished before you
+exit your program.
+Recall that when you {\tt fork(2)} a process {\tt fork(2)} returns,
+to the parent process, a non-zero number. This non-zero number is actually
+the PID of the newly constructed child process. After the parent process
+has {\tt fork(2)}-ed its child process you should add this new PID to a
+linked list. You can use the \texttt{joblist} data structure I have provided
+for you to keep track of the active PIDs.
+
+You must make some additional modifications as well. You must:
+\begin{itemize}
+ \item Modify the parent code, following the {\tt fork(2)} call, to add
+       the PID to the list of outstanding  PIDs if the command is to be
+       backgrounded. If it is not a background command you should wait for the
+       process to complete. There is a pitfall here, when you call {\tt wait(2)}
+       the call will return once one of the children has completed. The return
+       value will tell you which one. Please make sure you wait for the correct
+       PID. If a different PID completes you should remove that PID from the list
+       of PIDs.
+ \item Modify your code that handles {\tt quit} and {\tt exit} to make sure that all
+       the processes in the list have completed (i.e., the list is empty). If
+       the list is not empty, you should call {\tt wait(2)} until it is empty. Note
+       that {\tt wait(2)} returns -1 and sets {\tt errno} to {\tt ECHILD} if there
+       are no children of the process left. If this occurs, you can just empty
+       the list and exit the program. The {\tt errno} variable is a special
+       global variable used to pass errors around Unix based systems. To use
+       this global just include {\tt errno.h} in your program.
+\end{itemize}
+
+The functions that are provided by a the {\tt joblist} data structure can be
+found in \texttt{head/joblist.h}. In order to understand what each function does,
+you should read the header comments in {\tt joblist.c}.
+%To help with the linked list I would use the STL's {\tt list} class. For
+%a list of methods available to you in the {\tt list} class please see
+%\url{http://www.cplusplus.com/reference/list/list/}
+
+\section*{Phase III -- Add Built-In Commands (\emph{20 points})}
+\noindent\textbf{Recommended Completion Date}: Monday, Sept. 27\\
+\\
+In this phase you will add some additional built-in commands. Built-in
+commands are commands that are part of the shell program itself. We are
+going to add command line history to our shell. To help you with this
+process I have provided you with a finite buffer class. I would
+recommend you use it to manage your command line history.
+
+You should add the following commands:
+\begin{itemize}
+ \item {\tt history}: This command will print out the current contents of
+       the history table or message indicating the history is empty. This
+       command should itself be added to the history buffer.
+ \item {\tt !!}: This command will execute the last command the user
+       executed. This command should not be added to the history buffer.
+ \item {\tt !$n$}: This command tells the shell to execute the $n$-th
+       command in the history. If no such command exists it should display an
+       error. This command should not be added to the history buffer. You may
+       find the function {\tt atoi(3)} helpful in parsing this command.
+ \item {\tt cd }\emph{dir}: This command changes the directory the the location
+       given by \emph{dir}. This is very similar to the \texttt{cd} built-in command in
+       BASH (e.g., {\tt man cd}). You do \emph{not} have to implement {\tt cd} without a directory
+       or \verb#cd ~#. You will need to use the \texttt{chdir(2)} system call.
+\end{itemize}
+Unless otherwise noted, every command should be added to the history
+buffer. You will find the {\tt history} data structure in {\tt history.h} and
+ {\tt history.c} helpful in your task. Your finite buffer should be initialized
+to hold 5 commands in the history.
+
+\section*{Style (\emph{10 points})}
+Please be sure to use good function decomposition and follow the department standard when coding your
+solution. Make sure your code is well commented I need to understand
+what you understand. If you have any style questions please ask.
+
+\section*{A Clean Build (\emph{5 points})}
+To build your program you just need to type {\tt make(1)} at the command prompt. The file {\tt Makefile} has comments
+if you are curious how {\tt Makefile}'s go together. Your code should:
+\begin{itemize}
+ \item Compile clean (i.e., free of errors and warnings) on Fedora 34 using the command
+ {\tt make all}
+ \item Contain no memory leaks per \texttt{valgrind}. I will be using \texttt{valgrind} with the
+       \texttt{--leak-check=full} when checking your programs.
+       \begin{itemize}
+         \item You can install \texttt{valgrind} using the command
+         \verb|sudo dnf install valgrind|.
+       \end{itemize}
+\end{itemize}
+
+\section*{Make Targets}
+The operations that \texttt{make(1)} takes are called the targets. The makefile
+I have provided you with supports three targets of interest:
+\begin{enumerate}
+  \item {\tt all} this target builds the entire project, resulting in an executable
+  called {\tt shell}.
+  \item {\tt clean} this target removes all of the intermediate files generated by the
+  compiler.
+  \item {\tt clobber} this target does everything {\tt clean} does as well as
+  deleting the executable {\tt shell}.
+\end{enumerate}
+It should be noted that {\tt all} is the default target and thus, you can simply
+write {\tt make} and the {\tt all} target will run.
+
+\section*{General Reminders}
+\begin{itemize}
+\item \textbf{Start early}.
+
+\item Each phase comes with a suggested completion date to keep you on track
+during the two weeks. You will notice that at least 24 hours of time is recommended to
+be used for testing and debugging your project solution.
+
+\item Complete all of the other phases before attempting the extra credit.
+
+\item You should test your shell thoroughly.
+
+\item Make sure to check your code against the assignment \emph{before} submission.
+
+\item You are encouraged to see me for help with the project.
+
+\item You can discuss the project with each other but, the write-up should
+be your own.
+
+\item Don't forget about the man pages, they are as helpful as JavaDocs
+
+\item Do not modify the code in functions, unless I told you to.
+\end{itemize}
+
+
+\section*{Submission}
+Submissions in this class come in two parts:
+\begin{enumerate}
+  \item \textbf{Digital Submission}: Since our projects now have multiple files
+  that need to be graded, I ask that you submit a zip file containing the \texttt{make}
+  file and all associated with headers and source files.
+  This zip file \textbf{must be} named with your last name followed by the project number.  Failure to follow
+  these directions will result in a deduction of up to \textbf{5 points from your grade}.
+  \item \textbf{Hard Copy of Code}: A hard copy of all header and source code
+  files you authored for a project. This hard copy should be stapled together as
+  one packet. Failure to follow this direction will result in a deduction of
+  up to \textbf{5 points from your grade}.
+\end{enumerate}
+The directions above are for the purpose of ensuring a timely and correct
+grading of your project.
+
+\section*{Grading}
+To recap the above, your grade on this assignment will be determined as follows:
+\begin{itemize}
+ \item Program has good style and function decomposition (\emph{10 points}).
+ \item Program correctly implements phase I (\emph{35 points}).
+ \item Program correctly implements phase II (\emph{30 points}).
+ \item Program correctly implements phase III (\emph{20 points}).
+ \item Program compiles clean and has no memory leaks (\emph{5 points}).
+ \item Correctly implemented Extra credit I (\emph{5 points}).
+ \item Correctly implemented Extra credit II (\emph{5 points}).
+\end{itemize}
+
+\section*{Extra Credit I (\emph{5 points})}
+You can extend your implementation of the \texttt{cd} built-in command to support
+\texttt{cd} without a path after. This invocation, returns the user
+to their home directory. You can experiment with this behavior on your VM. To implement
+this feature, you should you will need to
+read the \verb#HOME# environment variable. You should use \texttt{apropos(1)} to
+determine what function (hint it will be in section 3) will allow you to read the
+\verb#HOME# environment variable. For example:
+\texttt{cd} is equivalent to \texttt{cd /home/kisselz} when I executed the command on my machine.
+
+\section*{Extra Credit II (\emph{5 points})}
+Once you have implemented the first extra credit, you can extend \texttt{cd} again. In this
+extension, you will handle \verb#~#. When you see a \verb#~# at the start of a path provided to
+\texttt{cd} you should replace \verb#~# with the contents of the \verb#HOME# environment variable.
+For example:
+\begin{itemize}
+ \item \verb#cd ~# is equivalent in behavior to \texttt{cd}
+ \item \verb#cd ~# is equivalent in behavior to \texttt{cd /home/kisselz} for myself on Fedora 34.
+ \item \verb#cd ~/public/os-examples# is equivalent in behavior to \texttt{cd /home/kisselz/public/os-examples} when
+       I execute the command on Fedora 34.
+\end{itemize}
+Again, you will have to use \texttt{apropos(1)} to determine what function call will allow you to read
+the \verb#HOME# environment variable.
+\end{document}
